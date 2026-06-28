@@ -442,8 +442,8 @@
       <h3 class="edit-modal-title"><i class="fa-solid fa-pen-to-square"></i> Edit Episode</h3>
       <input type="hidden" id="editEpId" />
       <div class="meta-form-row">
-        <div class="meta-field"><label>Episode Number</label><input type="number" id="editEpNum" class="admin-input" /></div>
-        <div class="meta-field"><label>Topic</label>
+        <div class="meta-field"><label for="editEpNum">Episode Number</label><input type="number" id="editEpNum" class="admin-input" /></div>
+        <div class="meta-field"><label for="editEpTopic">Topic</label>
           <select id="editEpTopic" class="admin-select">
             <option>Mental Health</option><option>Relationships</option><option>Self Growth</option>
             <option>School &amp; Life</option><option>Real Talk</option><option>Body Image</option>
@@ -452,11 +452,11 @@
           </select>
         </div>
       </div>
-      <div class="meta-field edit-modal-extra-field"><label>Title</label><input type="text" id="editEpTitle" class="admin-input" /></div>
-      <div class="meta-field"><label>Description</label><textarea id="editEpDesc" class="admin-textarea" rows="3"></textarea></div>
+      <div class="meta-field edit-modal-extra-field"><label for="editEpTitle">Title</label><input type="text" id="editEpTitle" class="admin-input" /></div>
+      <div class="meta-field"><label for="editEpDesc">Description</label><textarea id="editEpDesc" class="admin-textarea" rows="3"></textarea></div>
       <div class="meta-form-row">
-        <div class="meta-field"><label>Duration</label><input type="text" id="editEpDuration" class="admin-input" /></div>
-        <div class="meta-field"><label>Date</label><input type="date" id="editEpDate" class="admin-input" /></div>
+        <div class="meta-field"><label for="editEpDuration">Duration</label><input type="text" id="editEpDuration" class="admin-input" /></div>
+        <div class="meta-field"><label for="editEpDate">Date</label><input type="date" id="editEpDate" class="admin-input" /></div>
       </div>
       <div class="meta-actions edit-modal-actions">
         <button type="button" class="btn-primary" onclick="saveEditEpisode()"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
