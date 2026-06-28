@@ -1,0 +1,470 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard – The Pink Chronicles</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .edit-modal-title {
+      margin-bottom: 20px;
+    }
+
+    .edit-modal-extra-field {
+      margin-top: 12px;
+    }
+
+    .edit-modal-actions {
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== LOGIN SCREEN ===== -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <i class="fa-solid fa-microphone-lines"></i>
+        <div>
+          <span class="login-logo-top">THE</span>
+          <span class="login-logo-main">PINK CHRONICLES</span>
+          <span class="login-logo-sub">ADMIN PANEL</span>
+        </div>
+      </div>
+      <h2 class="login-title">Welcome back, Herty <i class="fa-solid fa-heart"></i></h2>
+      <p class="login-sub">Sign in to manage your podcast</p>
+      <div class="login-field">
+        <i class="fa-regular fa-envelope login-field-icon"></i>
+        <input id="loginEmail" type="email" placeholder="admin@pinkchronicles.com" class="login-input" />
+      </div>
+      <div class="login-field">
+        <i class="fa-solid fa-lock login-field-icon"></i>
+        <input id="loginPassword" type="password" placeholder="Password" class="login-input" />
+        <button type="button" class="login-toggle-pw" onclick="togglePassword()" aria-label="Toggle password">
+          <i class="fa-regular fa-eye" id="pwEyeIcon"></i>
+        </button>
+      </div>
+      <div id="loginError" class="login-error">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="loginErrorMsg">Incorrect email or password.</span>
+      </div>
+      <button type="button" class="btn-login" onclick="handleLogin()">
+        <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
+      </button>
+      <p class="login-hint">Demo: any email + password <strong>admin123</strong></p>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD ===== -->
+  <div id="dashboard" class="dashboard hidden">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <i class="fa-solid fa-microphone-lines sidebar-logo-icon"></i>
+        <div>
+          <span class="sidebar-brand-top">THE PINK</span>
+          <span class="sidebar-brand-main">CHRONICLES</span>
+          <span class="sidebar-brand-sub">Admin Panel</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button type="button" class="sidebar-link active" onclick="switchTab('overview', this)">
+          <i class="fa-solid fa-grid-2"></i> Overview
+        </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('upload', this)">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Upload Media
+        </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('episodes', this)">
+          <i class="fa-solid fa-podcast"></i> Episodes
+        </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('community', this)">
+          <i class="fa-solid fa-people-group"></i> Community
+        </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('settings', this)">
+          <i class="fa-solid fa-gear"></i> Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar"><i class="fa-solid fa-user"></i></div>
+          <div>
+            <p class="sidebar-user-name">Herty Afari</p>
+            <p class="sidebar-user-role">Administrator</p>
+          </div>
+        </div>
+        <button type="button" class="btn-logout" onclick="handleLogout()" title="Sign out">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-wrap">
+
+      <!-- Top bar -->
+      <header class="topbar">
+        <button type="button" class="topbar-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="topbar-title" id="topbarTitle">Overview</div>
+        <div class="topbar-right">
+          <div class="topbar-notif" id="notifTrigger" onclick="toggleNotifPanel()">
+            <i class="fa-regular fa-bell"></i>
+            <span class="notif-badge" id="notifBadge" class="hidden">0</span>
+          </div>
+          <a href="https://darlingbigjunoir-svg.github.io/ThePinkChronicles/" target="_blank" rel="noopener" class="btn-visit-site">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Visit Site</span>
+          </a>
+        </div>
+
+        <!-- Notification panel -->
+        <div class="notif-panel" id="notifPanel" class="hidden">
+          <div class="notif-panel-header">
+            <span>Notifications</span>
+            <button type="button" onclick="clearNotifs()">
+              <i class="fa-solid fa-check-double"></i> Mark all read
+            </button>
+          </div>
+          <div id="notifList"></div>
+        </div>
+      </header>
+
+      <!-- ===== TAB: OVERVIEW ===== -->
+      <section class="tab-content active" id="tab-overview">
+        <div class="page-header">
+          <h1>Good to see you, Herty <i class="fa-solid fa-heart tab-heart"></i></h1>
+          <p>Here's what's happening with The Pink Chronicles today.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon"><i class="fa-solid fa-podcast"></i></div>
+            <div class="stat-info">
+              <span class="stat-number" id="statEpisodes">0</span>
+              <span class="stat-label">Episodes</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon"><i class="fa-solid fa-people-group"></i></div>
+            <div class="stat-info">
+              <span class="stat-number" id="statMembers">0</span>
+              <span class="stat-label">Active Members</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon"><i class="fa-solid fa-video"></i></div>
+            <div class="stat-info">
+              <span class="stat-number" id="statVideos">0</span>
+              <span class="stat-label">Videos</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon"><i class="fa-solid fa-music"></i></div>
+            <div class="stat-info">
+              <span class="stat-number" id="statAudios">0</span>
+              <span class="stat-label">Audio Files</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-clock-rotate-left"></i> Recent Uploads</h2>
+          </div>
+          <div id="recentUploads">
+            <p class="empty-state"><i class="fa-regular fa-folder-open"></i><br>No uploads yet. Go to <strong>Upload Media</strong> to get started.</p>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-user-plus"></i> Recent Community Joins</h2>
+          </div>
+          <div id="recentMembers">
+            <p class="empty-state"><i class="fa-regular fa-users"></i><br>No community members yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: UPLOAD MEDIA ===== -->
+      <section class="tab-content" id="tab-upload">
+        <div class="page-header">
+          <h1>Upload Media <i class="fa-solid fa-cloud-arrow-up tab-heart"></i></h1>
+          <p>Add new videos and audio files to The Pink Chronicles.</p>
+        </div>
+
+        <div class="upload-box upload-box-single" id="mediaDropZone">
+          <div class="upload-box-icons-row">
+            <div class="upload-type-pill"><i class="fa-solid fa-video"></i> Video</div>
+            <span class="upload-or">or</span>
+            <div class="upload-type-pill"><i class="fa-solid fa-music"></i> Audio</div>
+          </div>
+          <h3>Upload Video or Audio</h3>
+          <p>Drag &amp; drop your file here, or click to browse</p>
+          <p class="upload-hint">Video: MP4, MOV, WebM &nbsp;·&nbsp; Audio: MP3, WAV, M4A</p>
+          <input type="file" id="mediaFile" accept="video/*,audio/*" class="hidden" onchange="handleMediaUpload(event)" title="Choose media file" aria-label="Choose media file" />
+          <button type="button" class="btn-upload-browse" onclick="document.getElementById('mediaFile').click()">
+            <i class="fa-solid fa-folder-open"></i> Choose File
+          </button>
+          <div id="selectedFileChip" class="selected-file-chip hidden">
+            <i class="fa-solid fa-file-circle-check"></i>
+            <span id="selectedFileName"></span>
+            <span id="selectedFileType" class="file-type-tag"></span>
+            <button type="button" onclick="clearSelectedFile()" class="chip-clear" aria-label="Remove file">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="uploadProgress" class="upload-progress-wrap hidden">
+          <div class="upload-progress-info">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <span id="uploadProgressLabel">Processing…</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+        </div>
+
+        <div class="section-card hidden" id="uploadMetaCard">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-tag"></i> Episode Details</h2>
+          </div>
+          <div class="meta-form">
+            <div class="meta-form-row">
+              <div class="meta-field">
+                <label>Episode Number</label>
+                <input type="number" id="metaEpNum" placeholder="e.g. 25" class="admin-input" />
+              </div>
+              <div class="meta-field">
+                <label for="metaTopic">Topic Category</label>
+                <select id="metaTopic" class="admin-select" title="Topic Category" aria-label="Topic Category">
+                  <option value="">Select topic…</option>
+                  <option>Mental Health</option><option>Relationships</option>
+                  <option>Self Growth</option><option>School &amp; Life</option>
+                  <option>Real Talk</option><option>Body Image</option>
+                  <option>Future &amp; Career</option><option>Confidence</option>
+                  <option>Fun &amp; Lifestyle</option><option>Healing &amp; Wellness</option>
+                </select>
+              </div>
+            </div>
+            <div class="meta-field">
+              <label>Episode Title</label>
+              <input type="text" id="metaTitle" placeholder="e.g. Be Kind to Yourself" class="admin-input" />
+            </div>
+            <div class="meta-field">
+              <label>Description</label>
+              <textarea id="metaDesc" placeholder="Write a short description of this episode…" class="admin-textarea" rows="3"></textarea>
+            </div>
+            <div class="meta-form-row">
+              <div class="meta-field">
+                <label>Duration</label>
+                <input type="text" id="metaDuration" placeholder="e.g. 32:15" class="admin-input" />
+              </div>
+              <div class="meta-field">
+                <label for="metaDate">Air Date</label>
+                <input type="date" id="metaDate" class="admin-input" title="Air Date" aria-label="Air Date" />
+              </div>
+            </div>
+            <div class="meta-actions">
+              <button type="button" class="btn-primary" onclick="saveUpload()">
+                <i class="fa-solid fa-floppy-disk"></i> Save Episode
+              </button>
+              <button type="button" class="btn-ghost" onclick="cancelUpload()">
+                <i class="fa-solid fa-xmark"></i> Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: EPISODES ===== -->
+      <section class="tab-content" id="tab-episodes">
+        <div class="page-header">
+          <h1>Episodes <i class="fa-solid fa-podcast tab-heart"></i></h1>
+          <p>Manage all uploaded episodes — edit, preview, or delete.</p>
+        </div>
+        <div class="filter-bar">
+          <div class="search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="episodeSearch" placeholder="Search episodes…" class="admin-search" oninput="filterEpisodes()" />
+          </div>
+          <select class="admin-select filter-select" id="episodeFilter" onchange="filterEpisodes()" title="Filter Episodes by Topic" aria-label="Filter episodes by topic">
+            <option value="">All Topics</option>
+            <option>Mental Health</option><option>Relationships</option>
+            <option>Self Growth</option><option>School &amp; Life</option>
+            <option>Real Talk</option><option>Body Image</option>
+            <option>Future &amp; Career</option><option>Confidence</option>
+            <option>Fun &amp; Lifestyle</option><option>Healing &amp; Wellness</option>
+          </select>
+        </div>
+        <div id="episodesList">
+          <p class="empty-state"><i class="fa-solid fa-podcast"></i><br>No episodes yet. Upload your first episode!</p>
+        </div>
+      </section>
+
+      <!-- ===== TAB: COMMUNITY ===== -->
+      <section class="tab-content" id="tab-community">
+        <div class="page-header">
+          <h1>Community <i class="fa-solid fa-heart tab-heart"></i></h1>
+          <p>Manage members of The Pink Chronicles sisterhood.</p>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-user-plus"></i> Add Community Member</h2>
+          </div>
+          <div class="meta-form">
+            <div class="meta-form-row">
+              <div class="meta-field">
+                <label>Full Name</label>
+                <input type="text" id="memberName" placeholder="e.g. Aisha Mensah" class="admin-input" />
+              </div>
+              <div class="meta-field">
+                <label>Email Address</label>
+                <input type="email" id="memberEmail" placeholder="e.g. aisha@email.com" class="admin-input" />
+              </div>
+            </div>
+            <div class="meta-form-row">
+              <div class="meta-field">
+                <label>Age</label>
+                <input type="number" id="memberAge" placeholder="e.g. 16" class="admin-input" min="13" max="25" />
+              </div>
+              <div class="meta-field">
+                <label for="memberRole">Role</label>
+                <select id="memberRole" class="admin-select">
+                  <option value="Member">Member</option>
+                  <option value="Moderator">Moderator</option>
+                  <option value="Guest Speaker">Guest Speaker</option>
+                </select>
+              </div>
+            </div>
+            <div class="meta-actions">
+              <button type="button" class="btn-primary" onclick="addMember()">
+                <i class="fa-solid fa-user-plus"></i> Add Member
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-users"></i> All Members</h2>
+            <div class="search-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="memberSearch" placeholder="Search members…" class="admin-search" oninput="filterMembers()" />
+            </div>
+          </div>
+          <div class="member-table-wrap">
+            <table class="member-table">
+              <thead>
+                <tr>
+                  <th>Member</th><th>Email</th><th>Age</th>
+                  <th>Role</th><th>Joined</th><th>Status</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="memberTableBody">
+                <tr><td colspan="7" class="empty-state"><i class="fa-solid fa-people-group"></i><br>No members yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: SETTINGS ===== -->
+      <section class="tab-content" id="tab-settings">
+        <div class="page-header">
+          <h1>Settings <i class="fa-solid fa-gear tab-heart"></i></h1>
+          <p>Manage your podcast settings and admin account.</p>
+        </div>
+        <div class="settings-grid">
+          <div class="section-card">
+            <div class="section-card-header"><h2><i class="fa-solid fa-podcast"></i> Podcast Info</h2></div>
+            <div class="meta-form">
+              <div class="meta-field"><label for="settingName">Podcast Name</label><input type="text" value="The Pink Chronicles" class="admin-input" id="settingName" aria-label="Podcast Name" /></div>
+              <div class="meta-field"><label for="settingHost">Host Name</label><input type="text" value="Herty Afari" class="admin-input" id="settingHost" aria-label="Host Name" /></div>
+              <div class="meta-field"><label for="settingTagline">Tagline</label><input type="text" value="Real talks. Real girls. Real growth." class="admin-input" id="settingTagline" aria-label="Tagline" /></div>
+              <div class="meta-field"><label for="settingUrl">Website URL</label><input type="url" value="https://darlingbigjunoir-svg.github.io/ThePinkChronicles/" class="admin-input" id="settingUrl" aria-label="Website URL" /></div>
+              <div class="meta-actions"><button type="button" class="btn-primary" onclick="saveSettings()"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button></div>
+            </div>
+          </div>
+          <div class="section-card">
+            <div class="section-card-header"><h2><i class="fa-solid fa-lock"></i> Change Password</h2></div>
+            <div class="meta-form">
+              <div class="meta-field"><label>Current Password</label><input type="password" id="currentPw" placeholder="••••••••" class="admin-input" /></div>
+              <div class="meta-field"><label>New Password</label><input type="password" id="newPw" placeholder="••••••••" class="admin-input" /></div>
+              <div class="meta-field"><label>Confirm New Password</label><input type="password" id="confirmPw" placeholder="••••••••" class="admin-input" /></div>
+              <div class="meta-actions"><button type="button" class="btn-primary" onclick="changePassword()"><i class="fa-solid fa-key"></i> Update Password</button></div>
+            </div>
+          </div>
+          <div class="section-card">
+            <div class="section-card-header"><h2><i class="fa-solid fa-share-nodes"></i> Social Links</h2></div>
+            <div class="meta-form">
+              <div class="meta-field social-field"><i class="fa-brands fa-instagram social-icon"></i><input type="url" placeholder="Instagram URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-tiktok social-icon"></i><input type="url" placeholder="TikTok URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-spotify social-icon"></i><input type="url" placeholder="Spotify Podcast URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-youtube social-icon"></i><input type="url" placeholder="YouTube Channel URL" class="admin-input" /></div>
+              <div class="meta-actions"><button type="button" class="btn-primary" onclick="saveSocials()"><i class="fa-solid fa-floppy-disk"></i> Save Social Links</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /main-wrap -->
+  </div><!-- /dashboard -->
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- CONFIRM MODAL -->
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmMsg">This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-danger" id="confirmOkBtn">Confirm</button>
+        <button type="button" class="btn-ghost" onclick="closeConfirm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT EPISODE MODAL -->
+  <div id="editModal" class="modal-overlay hidden">
+    <div class="modal-box modal-box-wide">
+      <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close edit dialog" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="edit-modal-title"><i class="fa-solid fa-pen-to-square"></i> Edit Episode</h3>
+      <input type="hidden" id="editEpId" />
+      <div class="meta-form-row">
+        <div class="meta-field"><label>Episode Number</label><input type="number" id="editEpNum" class="admin-input" /></div>
+        <div class="meta-field"><label>Topic</label>
+          <select id="editEpTopic" class="admin-select">
+            <option>Mental Health</option><option>Relationships</option><option>Self Growth</option>
+            <option>School &amp; Life</option><option>Real Talk</option><option>Body Image</option>
+            <option>Future &amp; Career</option><option>Confidence</option>
+            <option>Fun &amp; Lifestyle</option><option>Healing &amp; Wellness</option>
+          </select>
+        </div>
+      </div>
+      <div class="meta-field edit-modal-extra-field"><label>Title</label><input type="text" id="editEpTitle" class="admin-input" /></div>
+      <div class="meta-field"><label>Description</label><textarea id="editEpDesc" class="admin-textarea" rows="3"></textarea></div>
+      <div class="meta-form-row">
+        <div class="meta-field"><label>Duration</label><input type="text" id="editEpDuration" class="admin-input" /></div>
+        <div class="meta-field"><label>Date</label><input type="date" id="editEpDate" class="admin-input" /></div>
+      </div>
+      <div class="meta-actions edit-modal-actions">
+        <button type="button" class="btn-primary" onclick="saveEditEpisode()"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+        <button type="button" class="btn-ghost" onclick="closeEditModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
