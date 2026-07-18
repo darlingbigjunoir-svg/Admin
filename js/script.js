@@ -42,7 +42,42 @@ function show(id) { const el = document.getElementById(id); if (el) el.style.dis
 function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
 
-/
+/* =============================================
+   LOGIN
+   ============================================= */
+function handleLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw    = document.getElementById('loginPassword').value;
+  const err   = document.getElementById('loginError');
+  const msg   = document.getElementById('loginErrorMsg');
+
+  if (!email) {
+    msg.textContent = 'Please enter your email.';
+    showFlex('loginError'); return;
+  }
+  if (pw !== state.currentPassword) {
+    msg.textContent = 'Incorrect email or password.';
+    showFlex('loginError'); return;
+  }
+
+  hide('loginError');
+  hide('loginScreen');
+  showFlex('dashboard');
+  loadState();
+  refreshAll();
+  renderNotifs();
+  showToast('Welcome back, Herty! 💕', 'info');
+}
+
+function handleLogout() {
+  openConfirm('Log Out', 'Are you sure you want to sign out?', () => {
+    hide('dashboard');
+    showFlex('loginScreen');
+    document.getElementById('loginEmail').value    = '';
+    document.getElementById('loginPassword').value = '';
+    showToast('Logged out successfully.', 'info');
+  });
+}
 
 function togglePassword() {
   const input = document.getElementById('loginPassword');
