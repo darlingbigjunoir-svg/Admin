@@ -1,729 +1,733 @@
 /* =============================================
-   THE PINK CHRONICLES — script.js
-   Supabase-powered admin dashboard
+   THE PINK CHRONICLES — admin.js
+   Backed by Supabase: Auth + Postgres + Storage.
+   Every change here is written to the shared database,
+   so it appears live on the main site too.
    ============================================= */
+'use strict';
 
-/* ---------- Supabase client ---------- */
-const SUPABASE_URL = "https://dvvftwxttdffsrhevxwv.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_zEkGaekQbViTETnWU_GdTQ_3xgPq...";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* ── State (in-memory cache of what's in Supabase) ── */
+let state = {
+  episodes: [],
+  members:  [],
+  notifications: [
+    { icon: 'fa-cloud-arrow-up', text: 'Upload Media to get started!' },
+    { icon: 'fa-people-group',   text: 'Add your first community member.' },
+    { icon: 'fa-heart',          text: 'Welcome to The Pink Chronicles Admin!' }
+  ],
+  pendingUpload: null
+};
 
-/* ---------- App state ---------- */
-let episodesCache = [];
-let membersCache = [];
-let notifications = [];
-let unreadNotifCount = 0;
-let selectedFile = null;
-let selectedFileType = null; // 'video' | 'audio'
-let confirmCallback = null;
+/* ── Helpers ── */
+function show(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
+function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
 
-/* ============================================================
-   INIT
-   ============================================================ */
-document.addEventListener('DOMContentLoaded', init);
+/* =============================================
+   LOGIN  (Supabase Auth)
+   ============================================= */
+async function handleLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw    = document.getElementById('loginPassword').value;
+  const err   = document.getElementById('loginError');
+  const msg   = document.getElementById('loginErrorMsg');
+  const btn   = document.querySelector('.btn-login');
 
-async function init() {
-  // Defensive fixes for a couple of markup quirks:
-  // - #notifPanel and #loginError have no default-hidden style in the CSS,
-  //   so we force them closed on load and only reveal them via JS.
-  document.getElementById('notifPanel').classList.add('hidden');
-  document.getElementById('loginError').style.display = 'none';
+  if (!email) { msg.textContent = 'Please enter your email.'; showFlex('loginError'); return; }
+  if (!pw)    { msg.textContent = 'Please enter your password.'; showFlex('loginError'); return; }
 
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await enterDashboard();
-  } else {
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('dashboard').classList.add('hidden');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing in…'; }
+
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pw });
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> SIGN IN'; }
+
+  if (error) {
+    msg.textContent = 'Incorrect email or password.';
+    showFlex('loginError');
+    return;
   }
 
-  sb.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') {
-      document.getElementById('dashboard').classList.add('hidden');
-      document.getElementById('loginScreen').classList.remove('hidden');
-    }
-  });
-
-  setupRealtime();
+  hide('loginError');
+  await enterDashboard();
+  showToast('Welcome back, Herty! 💕', 'info');
 }
 
 async function enterDashboard() {
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('dashboard').classList.remove('hidden');
-
-  const { data: { user } } = await sb.auth.getUser();
-  if (user) {
-    const nameEl = document.querySelector('.sidebar-user-name');
-    if (nameEl) nameEl.textContent = user.user_metadata?.full_name || user.email;
-  }
-
-  await loadAllData();
+  hide('loginScreen');
+  showFlex('dashboard');
+  await loadState();
+  refreshAll();
+  renderNotifs();
 }
 
-/* ============================================================
-   AUTH
-   ============================================================ */
+function handleLogout() {
+  openConfirm('Log Out', 'Are you sure you want to sign out?', async () => {
+    await supabaseClient.auth.signOut();
+    hide('dashboard');
+    showFlex('loginScreen');
+    document.getElementById('loginEmail').value    = '';
+    document.getElementById('loginPassword').value = '';
+    showToast('Logged out successfully.', 'info');
+  });
+}
+
 function togglePassword() {
   const input = document.getElementById('loginPassword');
-  const icon = document.getElementById('pwEyeIcon');
-  const showing = input.type === 'text';
-  input.type = showing ? 'password' : 'text';
-  icon.classList.toggle('fa-eye', showing);
-  icon.classList.toggle('fa-eye-slash', !showing);
-}
-
-async function handleLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errorBox = document.getElementById('loginError');
-  const errorMsg = document.getElementById('loginErrorMsg');
-  errorBox.style.display = 'none';
-
-  if (!email || !password) {
-    errorMsg.textContent = 'Please enter both email and password.';
-    errorBox.style.display = 'flex';
-    return;
+  const icon  = document.getElementById('pwEyeIcon');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.className = 'fa-regular fa-eye-slash';
+  } else {
+    input.type = 'password';
+    icon.className = 'fa-regular fa-eye';
   }
+}
 
-  const btn = document.querySelector('.btn-login');
-  const originalHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SIGNING IN…';
+document.addEventListener('keydown', e => {
+  const ls = document.getElementById('loginScreen');
+  if (e.key === 'Enter' && ls && ls.style.display !== 'none') handleLogin();
+});
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-
-  btn.disabled = false;
-  btn.innerHTML = originalHtml;
-
-  if (error) {
-    errorMsg.textContent = error.message || 'Incorrect email or password.';
-    errorBox.style.display = 'flex';
-    return;
+/* Auto-login if a Supabase session already exists (page refresh) */
+async function checkExistingSession() {
+  const { data } = await supabaseClient.auth.getSession();
+  if (data && data.session) {
+    await enterDashboard();
   }
-
-  await enterDashboard();
 }
 
-async function handleLogout() {
-  await sb.auth.signOut();
-  location.reload();
-}
-
-/* ============================================================
-   NAVIGATION
-   ============================================================ */
-function switchTab(tabName, btnEl) {
-  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+/* =============================================
+   SIDEBAR & NAVIGATION
+   ============================================= */
+function switchTab(tabName, btn) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  btnEl.classList.add('active');
-  document.getElementById(`tab-${tabName}`).classList.add('active');
-
-  const titles = {
-    overview: 'Overview', upload: 'Upload Media', episodes: 'Episodes',
-    community: 'Community', settings: 'Settings'
-  };
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  document.getElementById('tab-' + tabName).classList.add('active');
+  btn.classList.add('active');
+  const titles = { overview:'Overview', upload:'Upload Media', episodes:'Episodes', community:'Community', settings:'Settings' };
   document.getElementById('topbarTitle').textContent = titles[tabName] || tabName;
-
-  if (window.innerWidth <= 900) {
-    document.getElementById('sidebar').classList.remove('open');
-  }
+  if (window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
+  if (tabName === 'overview')  refreshOverview();
+  if (tabName === 'episodes')  renderEpisodes();
+  if (tabName === 'community') renderMembers();
+  if (tabName === 'settings')  loadSettingsForm();
 }
 
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
+/* =============================================
+   NOTIFICATIONS
+   ============================================= */
 function toggleNotifPanel() {
   const panel = document.getElementById('notifPanel');
-  panel.classList.toggle('hidden');
-  if (!panel.classList.contains('hidden')) renderNotifList();
+  if (panel.style.display === 'none' || panel.style.display === '') {
+    show('notifPanel');
+    renderNotifs();
+  } else {
+    hide('notifPanel');
+  }
+}
+
+function renderNotifs() {
+  const list  = document.getElementById('notifList');
+  const badge = document.getElementById('notifBadge');
+  if (!state.notifications.length) {
+    list.innerHTML = '<p class="notif-empty">All caught up! 🎉</p>';
+    hide('notifBadge'); return;
+  }
+  badge.textContent = state.notifications.length;
+  showFlex('notifBadge');
+  list.innerHTML = state.notifications.map(n =>
+    `<div class="notif-item"><i class="fa-solid ${n.icon}"></i><span>${n.text}</span></div>`
+  ).join('');
 }
 
 function clearNotifs() {
-  notifications.forEach(n => n.read = true);
-  unreadNotifCount = 0;
-  updateNotifBadge();
-  renderNotifList();
+  state.notifications = [];
+  renderNotifs();
 }
 
-function updateNotifBadge() {
-  const badge = document.getElementById('notifBadge');
-  if (unreadNotifCount > 0) {
-    badge.textContent = unreadNotifCount > 9 ? '9+' : unreadNotifCount;
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
+document.addEventListener('click', e => {
+  const panel   = document.getElementById('notifPanel');
+  const trigger = document.getElementById('notifTrigger');
+  if (panel && trigger && !trigger.contains(e.target) && !panel.contains(e.target)) {
+    hide('notifPanel');
   }
+});
+
+/* =============================================
+   DATA LOADING  (Supabase reads)
+   ============================================= */
+async function loadState() {
+  const [episodesRes, membersRes] = await Promise.all([
+    supabaseClient.from('episodes').select('*').order('created_at', { ascending: false }),
+    supabaseClient.from('members').select('*').order('joined_at', { ascending: false })
+  ]);
+
+  if (episodesRes.error) { console.error(episodesRes.error); showToast('Could not load episodes.', 'error'); }
+  else state.episodes = episodesRes.data.map(mapEpisodeFromDb);
+
+  if (membersRes.error) { console.error(membersRes.error); showToast('Could not load members.', 'error'); }
+  else state.members = membersRes.data.map(mapMemberFromDb);
 }
 
-function pushNotification(icon, text) {
-  notifications.unshift({ icon, text, read: false, time: new Date() });
-  notifications = notifications.slice(0, 20);
-  unreadNotifCount++;
-  updateNotifBadge();
+/* Convert DB rows (snake_case) to the shape the UI code already expects */
+function mapEpisodeFromDb(row) {
+  return {
+    id: row.id, number: row.number, topic: row.topic, title: row.title,
+    desc: row.description, duration: row.duration,
+    date: row.air_date, type: row.type,
+    fileName: row.file_name, fileUrl: row.media_url, youtubeUrl: row.youtube_url
+  };
 }
-
-function renderNotifList() {
-  const list = document.getElementById('notifList');
-  if (!notifications.length) {
-    list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
-    return;
-  }
-  list.innerHTML = notifications.map(n => `
-    <div class="notif-item">
-      <i class="fa-solid ${n.icon}"></i>
-      <div>
-        <div>${escapeHtml(n.text)}</div>
-        <div style="font-size:.68rem;color:var(--gray);margin-top:2px;">${timeAgo(n.time)}</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-/* ============================================================
-   HELPERS
-   ============================================================ */
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str).replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function timeAgo(date) {
-  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function setVal(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.value = val ?? '';
-}
-
-function showToast(message, type = 'info') {
-  const toast = document.getElementById('toast');
-  const icons = { success: 'fa-circle-check', error: 'fa-circle-exclamation', info: 'fa-circle-info' };
-  toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i> <span>${escapeHtml(message)}</span>`;
-  toast.className = `toast ${type}`;
-  toast.classList.remove('hidden');
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => toast.classList.add('hidden'), 3200);
-}
-
-function showConfirm(title, msg, onConfirm) {
-  document.getElementById('confirmTitle').textContent = title;
-  document.getElementById('confirmMsg').textContent = msg;
-  confirmCallback = onConfirm;
-  document.getElementById('confirmModal').classList.remove('hidden');
-  document.getElementById('confirmOkBtn').onclick = () => {
-    if (confirmCallback) confirmCallback();
-    closeConfirm();
+function mapMemberFromDb(row) {
+  return {
+    id: row.id, name: row.name, email: row.email, age: row.age || '—',
+    role: row.role, status: row.status,
+    joined: row.joined_at ? new Date(row.joined_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'
   };
 }
 
-function closeConfirm() {
-  document.getElementById('confirmModal').classList.add('hidden');
-  confirmCallback = null;
+/* =============================================
+   OVERVIEW
+   ============================================= */
+function refreshAll() {
+  refreshOverview();
+  renderEpisodes();
+  renderMembers();
 }
 
-/* ============================================================
-   DATA LOADING
-   ============================================================ */
-async function loadAllData() {
-  await Promise.all([loadEpisodes(), loadMembers(), loadSettings()]);
-  renderOverviewStats();
-  renderRecentUploads();
-  renderRecentMembers();
+function refreshOverview() {
+  document.getElementById('statEpisodes').textContent = state.episodes.length;
+  document.getElementById('statMembers').textContent  = state.members.filter(m => m.status === 'active').length;
+  document.getElementById('statVideos').textContent   = state.episodes.filter(e => e.type === 'video').length;
+  document.getElementById('statAudios').textContent   = state.episodes.filter(e => e.type === 'audio').length;
+
+  const ru = document.getElementById('recentUploads');
+  const recent = [...state.episodes].slice(0, 4);
+  if (!recent.length) {
+    ru.innerHTML = '<p class="empty-state"><i class="fa-regular fa-folder-open"></i><br>No uploads yet.</p>';
+  } else {
+    ru.innerHTML = recent.map(ep => `
+      <div class="ep-admin-card">
+        <div class="ep-admin-num">EP<br>${ep.number || '?'}</div>
+        <div class="ep-admin-info">
+          <div class="ep-admin-title">${ep.title}</div>
+          <div class="ep-admin-meta">
+            <span class="ep-admin-topic-badge">${ep.topic || 'General'}</span>
+            <span class="ep-admin-type-badge ${ep.type}">
+              <i class="fa-solid ${ep.type === 'video' ? 'fa-video' : 'fa-music'}"></i> ${ep.type}
+            </span>
+            <span><i class="fa-regular fa-calendar-days"></i>${ep.date || '—'}</span>
+            ${ep.duration ? `<span><i class="fa-regular fa-clock"></i>${ep.duration}</span>` : ''}
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  const rm = document.getElementById('recentMembers');
+  const recentM = [...state.members].slice(0, 4);
+  if (!recentM.length) {
+    rm.innerHTML = '<p class="empty-state"><i class="fa-regular fa-users"></i><br>No community members yet.</p>';
+  } else {
+    rm.innerHTML = `<table class="member-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+      <tbody>${recentM.map(m => `
+        <tr>
+          <td><div class="member-name-cell"><div class="member-avatar"><i class="fa-solid fa-user"></i></div><span class="member-name-text">${m.name}</span></div></td>
+          <td>${m.email}</td>
+          <td><span class="role-badge ${getRoleClass(m.role)}">${m.role}</span></td>
+          <td><span class="status-badge ${m.status}">${m.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
 }
 
-async function loadEpisodes() {
-  const { data, error } = await sb.from('episodes').select('*').order('created_at', { ascending: false });
-  if (error) { showToast('Failed to load episodes: ' + error.message, 'error'); return; }
-  episodesCache = data || [];
-  renderEpisodes(episodesCache);
+/* =============================================
+   UPLOAD MEDIA
+   ============================================= */
+function handleMediaUpload(e) {
+  const file = e.target.files[0];
+  if (file) processMediaFile(file);
 }
 
-async function loadMembers() {
-  const { data, error } = await sb.from('members').select('*').order('joined_at', { ascending: false });
-  if (error) { showToast('Failed to load members: ' + error.message, 'error'); return; }
-  membersCache = data || [];
-  renderMembers(membersCache);
-}
+function processMediaFile(file) {
+  const isVideo = file.type.startsWith('video/');
+  const isAudio = file.type.startsWith('audio/');
+  if (!isVideo && !isAudio) { showToast('Please upload a video or audio file.', 'error'); return; }
 
-async function loadSettings() {
-  const { data, error } = await sb.from('settings').select('*').eq('id', 1).single();
-  if (error || !data) return;
+  const type = isVideo ? 'video' : 'audio';
+  state.pendingUpload = { file, type };
 
-  setVal('settingName', data.podcast_name);
-  setVal('settingHost', data.host_name);
-  setVal('settingTagline', data.tagline);
-  setVal('settingUrl', data.website_url);
+  document.getElementById('selectedFileName').textContent = file.name;
+  const tag = document.getElementById('selectedFileType');
+  tag.textContent  = type.toUpperCase();
+  tag.className    = `file-type-tag file-type-tag--${type}`;
+  showFlex('selectedFileChip');
+  document.getElementById('metaYoutubeUrl').value = '';
 
-  const socialInputs = document.querySelectorAll('#tab-settings .social-field input');
-  socialInputs.forEach(input => {
-    const ph = (input.placeholder || '').toLowerCase();
-    if (ph.includes('instagram')) input.value = data.instagram_url || '';
-    else if (ph.includes('tiktok')) input.value = data.tiktok_url || '';
-    else if (ph.includes('spotify')) input.value = data.spotify_url || '';
-    else if (ph.includes('youtube')) input.value = data.youtube_url || '';
+  showUploadProgress(file.name, () => {
+    show('uploadMetaCard');
+    document.getElementById('uploadMetaCard').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('metaDate').value = new Date().toISOString().split('T')[0];
+    showToast(`${type === 'video' ? '🎬 Video' : '🎵 Audio'} ready! Fill in the details.`, 'info');
   });
 }
 
-/* ============================================================
-   OVERVIEW
-   ============================================================ */
-function renderOverviewStats() {
-  document.getElementById('statEpisodes').textContent = episodesCache.length;
-  document.getElementById('statMembers').textContent = membersCache.filter(m => m.status !== 'inactive').length;
-  document.getElementById('statVideos').textContent = episodesCache.filter(e => e.type === 'video').length;
-  document.getElementById('statAudios').textContent = episodesCache.filter(e => e.type === 'audio').length;
-}
-
-function renderRecentUploads() {
-  const wrap = document.getElementById('recentUploads');
-  const recent = episodesCache.slice(0, 5);
-  if (!recent.length) {
-    wrap.innerHTML = '<p class="empty-state"><i class="fa-regular fa-folder-open"></i><br>No uploads yet. Go to <strong>Upload Media</strong> to get started.</p>';
-    return;
+/* Alternative path: paste a YouTube link instead of uploading a video file */
+function handleYoutubeInput() {
+  const url = document.getElementById('metaYoutubeUrl').value.trim();
+  if (!url) return;
+  state.pendingUpload = { youtubeUrl: url, type: 'video' };
+  hide('selectedFileChip');
+  document.getElementById('mediaFile').value = '';
+  show('uploadMetaCard');
+  document.getElementById('uploadMetaCard').scrollIntoView({ behavior: 'smooth' });
+  if (!document.getElementById('metaDate').value) {
+    document.getElementById('metaDate').value = new Date().toISOString().split('T')[0];
   }
-  wrap.innerHTML = recent.map(ep => `
-    <div class="ep-admin-card">
-      <div class="ep-admin-num">EP<br>${ep.number ?? '—'}</div>
-      <div class="ep-admin-info">
-        <div class="ep-admin-title">${escapeHtml(ep.title)}</div>
-        <div class="ep-admin-meta">
-          <span><i class="fa-regular fa-calendar"></i>${formatDate(ep.air_date || ep.created_at)}</span>
-          <span class="ep-admin-type-badge ${ep.type}"><i class="fa-solid fa-${ep.type === 'video' ? 'video' : 'music'}"></i>${ep.type}</span>
-          ${ep.topic ? `<span class="ep-admin-topic-badge">${escapeHtml(ep.topic)}</span>` : ''}
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-function renderRecentMembers() {
-  const wrap = document.getElementById('recentMembers');
-  const recent = membersCache.slice(0, 5);
-  if (!recent.length) {
-    wrap.innerHTML = '<p class="empty-state"><i class="fa-regular fa-users"></i><br>No community members yet.</p>';
-    return;
-  }
-  wrap.innerHTML = recent.map(m => `
-    <div class="ep-admin-card">
-      <div class="member-avatar" style="width:48px;height:48px;"><i class="fa-solid fa-user"></i></div>
-      <div class="ep-admin-info">
-        <div class="ep-admin-title">${escapeHtml(m.name)}</div>
-        <div class="ep-admin-meta">
-          <span><i class="fa-regular fa-envelope"></i>${escapeHtml(m.email)}</span>
-          <span><i class="fa-regular fa-calendar"></i>${formatDate(m.joined_at)}</span>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-/* ============================================================
-   UPLOAD MEDIA
-   ============================================================ */
-function handleMediaUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const isVideo = file.type.startsWith('video/');
-  const isAudio = file.type.startsWith('audio/');
-  if (!isVideo && !isAudio) {
-    showToast('Please choose a video or audio file.', 'error');
-    event.target.value = '';
-    return;
-  }
-
-  selectedFile = file;
-  selectedFileType = isVideo ? 'video' : 'audio';
-
-  document.getElementById('selectedFileName').textContent = file.name;
-  const typeTag = document.getElementById('selectedFileType');
-  typeTag.textContent = selectedFileType.toUpperCase();
-  typeTag.className = `file-type-tag file-type-tag--${selectedFileType}`;
-  document.getElementById('selectedFileChip').classList.remove('hidden');
-  document.getElementById('uploadMetaCard').classList.remove('hidden');
 }
 
 function clearSelectedFile() {
-  selectedFile = null;
-  selectedFileType = null;
+  state.pendingUpload = null;
+  hide('selectedFileChip');
+  hide('uploadMetaCard');
+  document.getElementById('selectedFileName').textContent = '';
   document.getElementById('mediaFile').value = '';
-  document.getElementById('selectedFileChip').classList.add('hidden');
+  document.getElementById('metaYoutubeUrl').value = '';
 }
 
-function cancelUpload() {
-  clearSelectedFile();
-  document.getElementById('uploadMetaCard').classList.add('hidden');
-  ['metaEpNum', 'metaTopic', 'metaTitle', 'metaDesc', 'metaDuration', 'metaDate'].forEach(id => setVal(id, ''));
+function showUploadProgress(name, callback) {
+  const wrap  = document.getElementById('uploadProgress');
+  const fill  = document.getElementById('progressBarFill');
+  const label = document.getElementById('uploadProgressLabel');
+  show('uploadProgress');
+  label.textContent = `Processing "${name}"…`;
+  fill.style.width  = '0%';
+  let pct = 0;
+  const iv = setInterval(() => {
+    pct += Math.random() * 22;
+    if (pct >= 100) {
+      pct = 100; fill.style.width = '100%';
+      label.textContent = 'Ready! ✓';
+      clearInterval(iv);
+      setTimeout(() => { hide('uploadProgress'); fill.style.width = '0%'; if (callback) callback(); }, 600);
+    } else {
+      fill.style.width = pct + '%';
+    }
+  }, 120);
 }
 
 async function saveUpload() {
-  if (!selectedFile) { showToast('Please choose a file first.', 'error'); return; }
+  const title    = document.getElementById('metaTitle').value.trim();
+  const number   = document.getElementById('metaEpNum').value.trim();
+  const topic    = document.getElementById('metaTopic').value;
+  const desc     = document.getElementById('metaDesc').value.trim();
+  const duration = document.getElementById('metaDuration').value.trim();
+  const date     = document.getElementById('metaDate').value;
 
-  const title = document.getElementById('metaTitle').value.trim();
   if (!title) { showToast('Please enter an episode title.', 'error'); return; }
+  if (!state.pendingUpload) { showToast('No file or YouTube link selected yet.', 'error'); return; }
 
-  const number = document.getElementById('metaEpNum').value || null;
-  const topic = document.getElementById('metaTopic').value || null;
-  const description = document.getElementById('metaDesc').value.trim() || null;
-  const duration = document.getElementById('metaDuration').value.trim() || null;
-  const airDate = document.getElementById('metaDate').value || null;
-
-  const progressWrap = document.getElementById('uploadProgress');
-  const progressFill = document.getElementById('progressBarFill');
-  const progressLabel = document.getElementById('uploadProgressLabel');
-  progressWrap.classList.remove('hidden');
-  progressLabel.textContent = 'Uploading file…';
-  progressFill.style.width = '0%';
-
-  // Supabase's JS storage client doesn't expose real upload progress,
-  // so this animates toward ~88% while the upload is in flight and
-  // snaps to 100% once it actually finishes.
-  let fakePct = 0;
-  const progressTimer = setInterval(() => {
-    fakePct = Math.min(fakePct + Math.random() * 12, 88);
-    progressFill.style.width = fakePct + '%';
-  }, 250);
+  const saveBtn = document.querySelector('#uploadMetaCard .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…'; }
 
   try {
-    const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    const path = `${selectedFileType}s/${Date.now()}_${safeName}`;
+    let mediaUrl = null, youtubeUrl = null, fileName = null;
 
-    const { error: uploadError } = await sb.storage.from('media').upload(path, selectedFile, {
-      cacheControl: '3600',
-      upsert: false
-    });
-    if (uploadError) throw uploadError;
+    if (state.pendingUpload.file) {
+      const file = state.pendingUpload.file;
+      const path = `${state.pendingUpload.type}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+      const { error: uploadError } = await supabaseClient.storage.from('media').upload(path, file);
+      if (uploadError) throw uploadError;
+      const { data: pub } = supabaseClient.storage.from('media').getPublicUrl(path);
+      mediaUrl = pub.publicUrl;
+      fileName = file.name;
+    } else if (state.pendingUpload.youtubeUrl) {
+      youtubeUrl = state.pendingUpload.youtubeUrl;
+    }
 
-    const { data: urlData } = sb.storage.from('media').getPublicUrl(path);
-
-    progressLabel.textContent = 'Saving episode details…';
-
-    const { error: insertError } = await sb.from('episodes').insert({
-      number: number ? parseInt(number, 10) : null,
-      topic, title, description, duration,
-      air_date: airDate,
-      type: selectedFileType,
-      media_url: urlData.publicUrl,
-      file_name: selectedFile.name
-    });
+    const { data: inserted, error: insertError } = await supabaseClient.from('episodes').insert({
+      title,
+      number:      number ? parseInt(number, 10) : (state.episodes.length + 1),
+      topic:       topic || 'General',
+      description: desc,
+      duration,
+      air_date:    date || new Date().toISOString().split('T')[0],
+      type:        state.pendingUpload.type,
+      media_url:   mediaUrl,
+      youtube_url: youtubeUrl,
+      file_name:   fileName
+    }).select().single();
     if (insertError) throw insertError;
 
-    clearInterval(progressTimer);
-    progressFill.style.width = '100%';
-    setTimeout(() => progressWrap.classList.add('hidden'), 500);
+    state.episodes.unshift(mapEpisodeFromDb(inserted));
+    state.pendingUpload = null;
 
-    showToast('Episode uploaded successfully!', 'success');
-    pushNotification('fa-cloud-arrow-up', `New episode uploaded: "${title}"`);
+    ['metaTitle','metaEpNum','metaDesc','metaDuration','metaDate','metaYoutubeUrl'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('metaTopic').value = '';
+    document.getElementById('mediaFile').value = '';
+    hide('selectedFileChip');
+    hide('uploadMetaCard');
+    document.getElementById('selectedFileName').textContent = '';
 
-    clearSelectedFile();
-    document.getElementById('uploadMetaCard').classList.add('hidden');
-    ['metaEpNum', 'metaTopic', 'metaTitle', 'metaDesc', 'metaDuration', 'metaDate'].forEach(id => setVal(id, ''));
-
-    await loadEpisodes();
-    renderOverviewStats();
-    renderRecentUploads();
+    refreshAll();
+    showToast(`Episode "${title}" saved! It's now live on the main site 🎉`, 'success');
+    state.notifications.unshift({ icon: 'fa-podcast', text: `New episode "${title}" uploaded.` });
+    renderNotifs();
   } catch (err) {
-    clearInterval(progressTimer);
-    progressWrap.classList.add('hidden');
-    showToast('Upload failed: ' + err.message, 'error');
+    console.error(err);
+    showToast('Upload failed: ' + (err.message || 'please try again.'), 'error');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Episode'; }
   }
 }
 
-/* ============================================================
+function cancelUpload() {
+  state.pendingUpload = null;
+  hide('uploadMetaCard');
+  hide('uploadProgress');
+  hide('selectedFileChip');
+  document.getElementById('selectedFileName').textContent = '';
+  document.getElementById('mediaFile').value = '';
+  document.getElementById('metaYoutubeUrl').value = '';
+  showToast('Upload cancelled.', 'info');
+}
+
+/* Drag and drop */
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('mediaDropZone');
+  if (!zone) return;
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', ()  => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length) processMediaFile(files[0]);
+  });
+});
+
+/* =============================================
    EPISODES
-   ============================================================ */
-function renderEpisodes(list) {
-  const wrap = document.getElementById('episodesList');
-  if (!list.length) {
-    wrap.innerHTML = '<p class="empty-state"><i class="fa-solid fa-podcast"></i><br>No episodes yet. Upload your first episode!</p>';
+   ============================================= */
+function renderEpisodes(filtered) {
+  const list = document.getElementById('episodesList');
+  const eps  = filtered !== undefined ? filtered : state.episodes;
+  if (!eps.length) {
+    list.innerHTML = '<p class="empty-state"><i class="fa-solid fa-podcast"></i><br>No episodes yet. Upload your first episode!</p>';
     return;
   }
-  wrap.innerHTML = list.map(ep => `
-    <div class="ep-admin-card">
-      <div class="ep-admin-num">EP<br>${ep.number ?? '—'}</div>
+  list.innerHTML = `<div class="section-card">${eps.map(ep => `
+    <div class="ep-admin-card" id="epCard-${ep.id}">
+      <div class="ep-admin-num">EP<br>${ep.number}</div>
       <div class="ep-admin-info">
-        <div class="ep-admin-title">${escapeHtml(ep.title)}</div>
+        <div class="ep-admin-title">${ep.title}</div>
         <div class="ep-admin-meta">
-          ${ep.duration ? `<span><i class="fa-regular fa-clock"></i>${escapeHtml(ep.duration)}</span>` : ''}
-          <span><i class="fa-regular fa-calendar"></i>${formatDate(ep.air_date || ep.created_at)}</span>
-          <span class="ep-admin-type-badge ${ep.type}"><i class="fa-solid fa-${ep.type === 'video' ? 'video' : 'music'}"></i>${ep.type}</span>
-          ${ep.topic ? `<span class="ep-admin-topic-badge">${escapeHtml(ep.topic)}</span>` : ''}
+          <span class="ep-admin-topic-badge">${ep.topic}</span>
+          <span class="ep-admin-type-badge ${ep.type}">
+            <i class="fa-solid ${ep.type === 'video' ? 'fa-video' : 'fa-music'}"></i> ${ep.type}
+          </span>
+          ${ep.date     ? `<span><i class="fa-regular fa-calendar-days"></i>${ep.date}</span>` : ''}
+          ${ep.duration ? `<span><i class="fa-regular fa-clock"></i>${ep.duration}</span>` : ''}
+          ${ep.fileName ? `<span><i class="fa-solid fa-file"></i>${ep.fileName}</span>` : ''}
+          ${ep.youtubeUrl ? `<span><i class="fa-brands fa-youtube"></i>YouTube</span>` : ''}
         </div>
+        ${ep.desc ? `<div style="font-size:.75rem;color:#64748b;margin-top:5px;line-height:1.5;">${ep.desc}</div>` : ''}
       </div>
       <div class="ep-admin-actions">
-        <button type="button" class="btn-icon" title="Preview" onclick="previewEpisode(${ep.id})"><i class="fa-solid fa-play"></i></button>
-        <button type="button" class="btn-icon" title="Edit" onclick="openEditEpisode(${ep.id})"><i class="fa-solid fa-pen"></i></button>
-        <button type="button" class="btn-icon btn-icon-danger" title="Delete" onclick="deleteEpisode(${ep.id})"><i class="fa-solid fa-trash"></i></button>
+        ${ep.fileUrl ? `<a href="${ep.fileUrl}" target="_blank" class="btn-icon" title="Preview"><i class="fa-solid fa-play"></i></a>` : ''}
+        ${ep.youtubeUrl ? `<a href="${ep.youtubeUrl}" target="_blank" class="btn-icon" title="Preview on YouTube"><i class="fa-brands fa-youtube"></i></a>` : ''}
+        <button class="btn-icon" onclick="openEditModal(${ep.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon btn-icon-danger" onclick="deleteEpisode(${ep.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('')}</div>`;
 }
 
 function filterEpisodes() {
-  const q = document.getElementById('episodeSearch').value.trim().toLowerCase();
+  const q     = document.getElementById('episodeSearch').value.toLowerCase();
   const topic = document.getElementById('episodeFilter').value;
-  const filtered = episodesCache.filter(ep => {
-    const matchesQ = !q || ep.title?.toLowerCase().includes(q) || ep.description?.toLowerCase().includes(q);
-    const matchesTopic = !topic || ep.topic === topic;
-    return matchesQ && matchesTopic;
-  });
-  renderEpisodes(filtered);
-}
-
-function previewEpisode(id) {
-  const ep = episodesCache.find(e => e.id === id);
-  if (!ep) return;
-  const url = ep.media_url || ep.youtube_url;
-  if (!url) { showToast('No media file attached to this episode.', 'error'); return; }
-  window.open(url, '_blank', 'noopener');
-}
-
-function openEditEpisode(id) {
-  const ep = episodesCache.find(e => e.id === id);
-  if (!ep) return;
-  document.getElementById('editEpId').value = ep.id;
-  setVal('editEpNum', ep.number);
-  setVal('editEpTopic', ep.topic || '');
-  setVal('editEpTitle', ep.title);
-  setVal('editEpDesc', ep.description);
-  setVal('editEpDuration', ep.duration);
-  setVal('editEpDate', ep.air_date);
-  document.getElementById('editModal').classList.remove('hidden');
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').classList.add('hidden');
-}
-
-async function saveEditEpisode() {
-  const id = document.getElementById('editEpId').value;
-  const title = document.getElementById('editEpTitle').value.trim();
-  if (!title) { showToast('Title cannot be empty.', 'error'); return; }
-
-  const updates = {
-    number: document.getElementById('editEpNum').value ? parseInt(document.getElementById('editEpNum').value, 10) : null,
-    topic: document.getElementById('editEpTopic').value || null,
-    title,
-    description: document.getElementById('editEpDesc').value.trim() || null,
-    duration: document.getElementById('editEpDuration').value.trim() || null,
-    air_date: document.getElementById('editEpDate').value || null
-  };
-
-  const { error } = await sb.from('episodes').update(updates).eq('id', id);
-  if (error) { showToast('Failed to save: ' + error.message, 'error'); return; }
-
-  showToast('Episode updated.', 'success');
-  closeEditModal();
-  await loadEpisodes();
-  renderOverviewStats();
-  renderRecentUploads();
+  renderEpisodes(state.episodes.filter(ep => {
+    const mQ = !q || ep.title.toLowerCase().includes(q) || (ep.desc && ep.desc.toLowerCase().includes(q));
+    const mT = !topic || ep.topic === topic;
+    return mQ && mT;
+  }));
 }
 
 function deleteEpisode(id) {
-  const ep = episodesCache.find(e => e.id === id);
-  showConfirm(
-    'Delete this episode?',
-    `"${ep?.title || 'This episode'}" will be permanently removed. This cannot be undone.`,
-    async () => {
-      const { error } = await sb.from('episodes').delete().eq('id', id);
-      if (error) { showToast('Failed to delete: ' + error.message, 'error'); return; }
-      showToast('Episode deleted.', 'success');
-      await loadEpisodes();
-      renderOverviewStats();
-      renderRecentUploads();
+  const ep = state.episodes.find(e => e.id === id);
+  if (!ep) return;
+  openConfirm('Delete Episode', `Delete "${ep.title}"? This cannot be undone.`, async () => {
+    try {
+      // Best-effort: remove the file from storage too, if there is one
+      if (ep.fileUrl) {
+        const marker = '/object/public/media/';
+        const idx = ep.fileUrl.indexOf(marker);
+        if (idx !== -1) {
+          const path = ep.fileUrl.substring(idx + marker.length);
+          await supabaseClient.storage.from('media').remove([path]);
+        }
+      }
+      const { error } = await supabaseClient.from('episodes').delete().eq('id', id);
+      if (error) throw error;
+      state.episodes = state.episodes.filter(e => e.id !== id);
+      refreshAll();
+      showToast('Episode deleted — it\'s gone from the main site too.', 'info');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not delete episode: ' + (err.message || ''), 'error');
     }
-  );
-}
-
-/* ============================================================
-   COMMUNITY
-   ============================================================ */
-async function addMember() {
-  const name = document.getElementById('memberName').value.trim();
-  const email = document.getElementById('memberEmail').value.trim();
-  const age = document.getElementById('memberAge').value;
-  const role = document.getElementById('memberRole').value;
-
-  if (!name || !email) { showToast('Please enter a name and email.', 'error'); return; }
-
-  const { error } = await sb.from('members').insert({
-    name, email, age: age || null, role, status: 'active'
   });
-
-  if (error) {
-    showToast(error.code === '23505' ? 'A member with this email already exists.' : 'Failed to add member: ' + error.message, 'error');
-    return;
-  }
-
-  showToast('Member added.', 'success');
-  ['memberName', 'memberEmail', 'memberAge'].forEach(id => setVal(id, ''));
-  document.getElementById('memberRole').value = 'Member';
-
-  await loadMembers();
-  renderOverviewStats();
-  renderRecentMembers();
 }
 
-function renderMembers(list) {
-  const body = document.getElementById('memberTableBody');
+function openEditModal(id) {
+  const ep = state.episodes.find(e => e.id === id);
+  if (!ep) return;
+  document.getElementById('editEpId').value       = id;
+  document.getElementById('editEpNum').value      = ep.number;
+  document.getElementById('editEpTopic').value    = ep.topic;
+  document.getElementById('editEpTitle').value    = ep.title;
+  document.getElementById('editEpDesc').value     = ep.desc;
+  document.getElementById('editEpDuration').value = ep.duration;
+  document.getElementById('editEpDate').value     = ep.date;
+  showFlex('editModal');
+}
+function closeEditModal() { hide('editModal'); }
+
+async function saveEditEpisode() {
+  const id    = parseInt(document.getElementById('editEpId').value);
+  const ep    = state.episodes.find(e => e.id === id);
+  const title = document.getElementById('editEpTitle').value.trim();
+  if (!ep)    return;
+  if (!title) { showToast('Title cannot be empty.', 'error'); return; }
+
+  const updated = {
+    number:      document.getElementById('editEpNum').value,
+    topic:       document.getElementById('editEpTopic').value,
+    title,
+    description: document.getElementById('editEpDesc').value.trim(),
+    duration:    document.getElementById('editEpDuration').value.trim(),
+    air_date:    document.getElementById('editEpDate').value
+  };
+
+  const { error } = await supabaseClient.from('episodes').update(updated).eq('id', id);
+  if (error) { console.error(error); showToast('Could not save changes.', 'error'); return; }
+
+  ep.number = updated.number; ep.topic = updated.topic; ep.title = updated.title;
+  ep.desc = updated.description; ep.duration = updated.duration; ep.date = updated.air_date;
+
+  refreshAll(); closeEditModal();
+  showToast(`"${ep.title}" updated on the main site!`, 'success');
+}
+
+/* =============================================
+   COMMUNITY
+   ============================================= */
+async function addMember() {
+  const name  = document.getElementById('memberName').value.trim();
+  const email = document.getElementById('memberEmail').value.trim();
+  const age   = document.getElementById('memberAge').value.trim();
+  const role  = document.getElementById('memberRole').value;
+
+  if (!name)  { showToast('Please enter a name.', 'error'); return; }
+  if (!email) { showToast('Please enter an email.', 'error'); return; }
+  if (!isValidEmail(email)) { showToast('Please enter a valid email address.', 'error'); return; }
+  if (state.members.find(m => m.email.toLowerCase() === email.toLowerCase())) {
+    showToast('A member with this email already exists.', 'error'); return;
+  }
+
+  const { data, error } = await supabaseClient.from('members').insert({
+    name, email, age: age || null, role, status: 'active'
+  }).select().single();
+
+  if (error) { console.error(error); showToast('Could not add member: ' + error.message, 'error'); return; }
+
+  state.members.unshift(mapMemberFromDb(data));
+  document.getElementById('memberName').value  = '';
+  document.getElementById('memberEmail').value = '';
+  document.getElementById('memberAge').value   = '';
+  document.getElementById('memberRole').value  = 'Member';
+  renderMembers(); refreshOverview();
+  state.notifications.unshift({ icon: 'fa-user-plus', text: `${name} joined the community!` });
+  renderNotifs();
+  showToast(`${name} added to the community! 💕`, 'success');
+}
+
+function renderMembers(filtered) {
+  const tbody = document.getElementById('memberTableBody');
+  const list  = filtered !== undefined ? filtered : state.members;
   if (!list.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fa-solid fa-people-group"></i><br>No members yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fa-solid fa-people-group"></i><br>No members yet.</td></tr>';
     return;
   }
-  body.innerHTML = list.map(m => `
+  tbody.innerHTML = list.map(m => `
     <tr>
-      <td>
-        <div class="member-name-cell">
-          <div class="member-avatar"><i class="fa-solid fa-user"></i></div>
-          <span class="member-name-text">${escapeHtml(m.name)}</span>
-        </div>
-      </td>
-      <td>${escapeHtml(m.email)}</td>
-      <td>${m.age ? escapeHtml(m.age) : '—'}</td>
-      <td>
-        <select class="admin-select" style="min-width:130px;padding:6px 28px 6px 10px;font-size:.75rem;" onchange="updateMemberRole(${m.id}, this.value)">
-          ${['Member', 'Moderator', 'Guest Speaker'].map(r => `<option value="${r}" ${m.role === r ? 'selected' : ''}>${r}</option>`).join('')}
-        </select>
-      </td>
-      <td>${formatDate(m.joined_at)}</td>
-      <td>
-        <span class="status-badge ${m.status === 'inactive' ? 'inactive' : 'active'}" style="cursor:pointer;" onclick="toggleMemberStatus(${m.id}, '${m.status}')">
-          ${m.status === 'inactive' ? 'Inactive' : 'Active'}
-        </span>
-      </td>
-      <td>
-        <div class="table-actions">
-          <button type="button" class="btn-icon btn-icon-danger" title="Remove member" onclick="deleteMember(${m.id})"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+      <td><div class="member-name-cell"><div class="member-avatar"><i class="fa-solid fa-user"></i></div><span class="member-name-text">${m.name}</span></div></td>
+      <td>${m.email}</td><td>${m.age}</td>
+      <td><span class="role-badge ${getRoleClass(m.role)}">${m.role}</span></td>
+      <td>${m.joined}</td>
+      <td><span class="status-badge ${m.status}">${m.status}</span></td>
+      <td><div class="table-actions">
+        <button class="btn-icon" onclick="toggleMemberStatus(${m.id})" title="${m.status==='active'?'Deactivate':'Activate'}">
+          <i class="fa-solid ${m.status==='active'?'fa-user-slash':'fa-user-check'}"></i>
+        </button>
+        <button class="btn-icon" onclick="changeMemberRole(${m.id})" title="Change Role"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon btn-icon-danger" onclick="removeMember(${m.id})" title="Remove"><i class="fa-solid fa-trash"></i></button>
+      </div></td>
+    </tr>`).join('');
 }
 
 function filterMembers() {
-  const q = document.getElementById('memberSearch').value.trim().toLowerCase();
-  const filtered = membersCache.filter(m =>
-    !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)
-  );
-  renderMembers(filtered);
+  const q = document.getElementById('memberSearch').value.toLowerCase();
+  renderMembers(state.members.filter(m =>
+    m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q) || m.role.toLowerCase().includes(q)
+  ));
 }
 
-async function updateMemberRole(id, role) {
-  const { error } = await sb.from('members').update({ role }).eq('id', id);
-  if (error) { showToast('Failed to update role: ' + error.message, 'error'); return; }
-  const m = membersCache.find(x => x.id === id);
-  if (m) m.role = role;
-  showToast('Role updated.', 'success');
-}
-
-async function toggleMemberStatus(id, currentStatus) {
-  const newStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
-  const { error } = await sb.from('members').update({ status: newStatus }).eq('id', id);
-  if (error) { showToast('Failed to update status: ' + error.message, 'error'); return; }
-  await loadMembers();
-  renderOverviewStats();
-}
-
-function deleteMember(id) {
-  const m = membersCache.find(x => x.id === id);
-  showConfirm(
-    'Remove this member?',
-    `${m?.name || 'This member'} will be removed from the community. This cannot be undone.`,
-    async () => {
-      const { error } = await sb.from('members').delete().eq('id', id);
-      if (error) { showToast('Failed to remove member: ' + error.message, 'error'); return; }
-      showToast('Member removed.', 'success');
-      await loadMembers();
-      renderOverviewStats();
-      renderRecentMembers();
-    }
-  );
-}
-
-/* ============================================================
-   SETTINGS
-   ============================================================ */
-async function saveSettings() {
-  const updates = {
-    podcast_name: document.getElementById('settingName').value.trim(),
-    host_name: document.getElementById('settingHost').value.trim(),
-    tagline: document.getElementById('settingTagline').value.trim(),
-    website_url: document.getElementById('settingUrl').value.trim(),
-    updated_at: new Date().toISOString()
-  };
-  const { error } = await sb.from('settings').update(updates).eq('id', 1);
-  if (error) { showToast('Failed to save settings: ' + error.message, 'error'); return; }
-  showToast('Settings saved.', 'success');
-}
-
-async function saveSocials() {
-  const inputs = document.querySelectorAll('#tab-settings .social-field input');
-  const updates = { updated_at: new Date().toISOString() };
-  inputs.forEach(input => {
-    const ph = (input.placeholder || '').toLowerCase();
-    if (ph.includes('instagram')) updates.instagram_url = input.value.trim() || null;
-    else if (ph.includes('tiktok')) updates.tiktok_url = input.value.trim() || null;
-    else if (ph.includes('spotify')) updates.spotify_url = input.value.trim() || null;
-    else if (ph.includes('youtube')) updates.youtube_url = input.value.trim() || null;
+function toggleMemberStatus(id) {
+  const m = state.members.find(m => m.id === id);
+  if (!m) return;
+  const next   = m.status === 'active' ? 'inactive' : 'active';
+  const action = next === 'inactive' ? 'deactivate' : 'reactivate';
+  openConfirm(`${action.charAt(0).toUpperCase()+action.slice(1)} Member`, `Are you sure you want to ${action} ${m.name}?`, async () => {
+    const { error } = await supabaseClient.from('members').update({ status: next }).eq('id', id);
+    if (error) { showToast('Could not update member.', 'error'); return; }
+    m.status = next; renderMembers(); refreshOverview();
+    showToast(`${m.name} has been ${next === 'active' ? 'reactivated' : 'deactivated'}.`, 'info');
   });
+}
 
-  const { error } = await sb.from('settings').update(updates).eq('id', 1);
-  if (error) { showToast('Failed to save social links: ' + error.message, 'error'); return; }
-  showToast('Social links saved.', 'success');
+function changeMemberRole(id) {
+  const m = state.members.find(m => m.id === id);
+  if (!m) return;
+  const roles = ['Member','Moderator','Guest Speaker'];
+  const next  = roles[(roles.indexOf(m.role)+1) % roles.length];
+  openConfirm('Change Role', `Change ${m.name}'s role to "${next}"?`, async () => {
+    const { error } = await supabaseClient.from('members').update({ role: next }).eq('id', id);
+    if (error) { showToast('Could not update role.', 'error'); return; }
+    m.role = next; renderMembers();
+    showToast(`${m.name} is now a ${next}.`, 'success');
+  });
+}
+
+function removeMember(id) {
+  const m = state.members.find(m => m.id === id);
+  if (!m) return;
+  openConfirm('Remove Member', `Remove ${m.name} from the community? This cannot be undone.`, async () => {
+    const { error } = await supabaseClient.from('members').delete().eq('id', id);
+    if (error) { showToast('Could not remove member.', 'error'); return; }
+    state.members = state.members.filter(m => m.id !== id);
+    renderMembers(); refreshOverview();
+    showToast(`${m.name} has been removed.`, 'info');
+  });
+}
+
+function getRoleClass(role) {
+  if (role === 'Moderator')    return 'moderator';
+  if (role === 'Guest Speaker') return 'guest';
+  return 'member';
+}
+
+/* =============================================
+   SETTINGS
+   ============================================= */
+async function loadSettingsForm() {
+  const { data, error } = await supabaseClient.from('settings').select('*').eq('id', 1).single();
+  if (error || !data) return;
+  document.getElementById('settingName').value     = data.podcast_name || '';
+  document.getElementById('settingHost').value     = data.host_name || '';
+  document.getElementById('settingTagline').value  = data.tagline || '';
+  document.getElementById('settingUrl').value      = data.website_url || '';
+  document.getElementById('settingInstagram').value = data.instagram_url || '';
+  document.getElementById('settingTiktok').value    = data.tiktok_url || '';
+  document.getElementById('settingSpotify').value   = data.spotify_url || '';
+  document.getElementById('settingYoutube').value   = data.youtube_url || '';
+}
+
+async function saveSettings() {
+  const podcast_name = document.getElementById('settingName').value.trim();
+  if (!podcast_name) { showToast('Name is required.', 'error'); return; }
+  const { error } = await supabaseClient.from('settings').update({
+    podcast_name,
+    host_name:   document.getElementById('settingHost').value.trim(),
+    tagline:     document.getElementById('settingTagline').value.trim(),
+    website_url: document.getElementById('settingUrl').value.trim()
+  }).eq('id', 1);
+  if (error) { console.error(error); showToast('Could not save settings.', 'error'); return; }
+  showToast('Podcast info saved! ✓', 'success');
 }
 
 async function changePassword() {
-  const currentPw = document.getElementById('currentPw').value;
-  const newPw = document.getElementById('newPw').value;
-  const confirmPw = document.getElementById('confirmPw').value;
+  const cur  = document.getElementById('currentPw').value;
+  const nw   = document.getElementById('newPw').value;
+  const conf = document.getElementById('confirmPw').value;
+  if (!cur)                          { showToast('Please enter your current password.', 'error'); return; }
+  if (nw.length < 6)                 { showToast('New password must be at least 6 characters.', 'error'); return; }
+  if (nw !== conf)                   { showToast('Passwords do not match.', 'error'); return; }
 
-  if (!currentPw || !newPw || !confirmPw) { showToast('Please fill in all password fields.', 'error'); return; }
-  if (newPw !== confirmPw) { showToast('New passwords do not match.', 'error'); return; }
-  if (newPw.length < 6) { showToast('New password must be at least 6 characters.', 'error'); return; }
-
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) { showToast('Session expired. Please sign in again.', 'error'); return; }
-
-  // Re-verify the current password before allowing a change
-  const { error: verifyError } = await sb.auth.signInWithPassword({ email: user.email, password: currentPw });
+  // Re-verify the current password by attempting a fresh sign-in
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) { showToast('Session expired, please log in again.', 'error'); return; }
+  const { error: verifyError } = await supabaseClient.auth.signInWithPassword({ email: user.email, password: cur });
   if (verifyError) { showToast('Current password is incorrect.', 'error'); return; }
 
-  const { error } = await sb.auth.updateUser({ password: newPw });
-  if (error) { showToast('Failed to update password: ' + error.message, 'error'); return; }
+  const { error } = await supabaseClient.auth.updateUser({ password: nw });
+  if (error) { showToast('Could not update password: ' + error.message, 'error'); return; }
 
-  showToast('Password updated successfully.', 'success');
-  ['currentPw', 'newPw', 'confirmPw'].forEach(id => setVal(id, ''));
+  ['currentPw','newPw','confirmPw'].forEach(id => document.getElementById(id).value = '');
+  showToast('Password updated! 🔒', 'success');
 }
 
-/* ============================================================
-   REALTIME — notify the admin when a visitor joins the community
-   ============================================================ */
-function setupRealtime() {
-  sb.channel('public:members')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'members' }, payload => {
-      const m = payload.new;
-      if (membersCache.some(x => x.id === m.id)) return;
-      membersCache.unshift(m);
-      pushNotification('fa-user-plus', `${m.name} just joined the community!`);
-      renderMembers(membersCache);
-      renderRecentMembers();
-      renderOverviewStats();
-      showToast(`${m.name} just joined!`, 'info');
-    })
-    .subscribe();
+async function saveSocials() {
+  const { error } = await supabaseClient.from('settings').update({
+    instagram_url: document.getElementById('settingInstagram').value.trim(),
+    tiktok_url:    document.getElementById('settingTiktok').value.trim(),
+    spotify_url:   document.getElementById('settingSpotify').value.trim(),
+    youtube_url:   document.getElementById('settingYoutube').value.trim()
+  }).eq('id', 1);
+  if (error) { console.error(error); showToast('Could not save social links.', 'error'); return; }
+  showToast('Social links saved! ✓', 'success');
 }
+
+/* =============================================
+   UI HELPERS
+   ============================================= */
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+  const toast = document.getElementById('toast');
+  const icons = { success:'fa-circle-check', error:'fa-circle-xmark', info:'fa-circle-info' };
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<i class="fa-solid ${icons[type]}"></i> ${msg}`;
+  toast.style.display = 'flex';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+}
+
+let confirmCallback = null;
+function openConfirm(title, msg, callback) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent   = msg;
+  confirmCallback = callback;
+  showFlex('confirmModal');
+  document.getElementById('confirmOkBtn').onclick = () => { closeConfirm(); if (confirmCallback) confirmCallback(); };
+}
+function closeConfirm() { hide('confirmModal'); confirmCallback = null; }
+
+document.addEventListener('click', e => {
+  const cm = document.getElementById('confirmModal');
+  if (e.target === cm) closeConfirm();
+  const em = document.getElementById('editModal');
+  if (e.target === em) closeEditModal();
+});
+
+function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+/* =============================================
+   INIT
+   ============================================= */
+document.addEventListener('DOMContentLoaded', () => {
+  renderNotifs();
+  checkExistingSession();
+});
