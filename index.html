@@ -19,15 +19,6 @@
     .edit-modal-actions {
       margin-top: 8px;
     }
-
-    .upload-box-spaced {
-      margin-top: 14px;
-    }
-
-    .meta-field-centered {
-      max-width: 480px;
-      margin: 10px auto 0;
-    }
   </style>
 </head>
 <body>
@@ -56,7 +47,7 @@
           <i class="fa-regular fa-eye" id="pwEyeIcon"></i>
         </button>
       </div>
-      <div id="loginError" class="login-error">
+      <div id="loginError" class="login-error hidden">
         <i class="fa-solid fa-circle-exclamation"></i>
         <span id="loginErrorMsg">Incorrect email or password.</span>
       </div>
@@ -125,7 +116,7 @@
         <div class="topbar-right">
           <div class="topbar-notif" id="notifTrigger" onclick="toggleNotifPanel()">
             <i class="fa-regular fa-bell"></i>
-            <span class="notif-badge" id="notifBadge" class="hidden">0</span>
+            <span class="notif-badge hidden" id="notifBadge">0</span>
           </div>
           <a href="https://darlingbigjunoir-svg.github.io/ThePinkChronicles/" target="_blank" rel="noopener" class="btn-visit-site">
             <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Visit Site</span>
@@ -133,7 +124,7 @@
         </div>
 
         <!-- Notification panel -->
-        <div class="notif-panel" id="notifPanel" class="hidden">
+        <div class="notif-panel hidden" id="notifPanel">
           <div class="notif-panel-header">
             <span>Notifications</span>
             <button type="button" onclick="clearNotifs()">
@@ -231,13 +222,13 @@
           </div>
         </div>
 
-        <div class="upload-box upload-box-single upload-box-spaced">
+        <div class="upload-box upload-box-single" style="margin-top:14px;">
           <div class="upload-box-icons-row">
             <div class="upload-type-pill"><i class="fa-brands fa-youtube"></i> YouTube Link</div>
           </div>
           <h3>Or paste a YouTube link</h3>
           <p>Best for full episode videos — no file size limits.</p>
-          <div class="meta-field meta-field-centered">
+          <div class="meta-field" style="max-width:480px;margin:10px auto 0;">
             <input type="url" id="metaYoutubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="admin-input" oninput="handleYoutubeInput()" />
           </div>
         </div>
