@@ -47,14 +47,14 @@
           <i class="fa-regular fa-eye" id="pwEyeIcon"></i>
         </button>
       </div>
-      <div id="loginError" class="login-error hidden">
+      <div id="loginError" class="login-error">
         <i class="fa-solid fa-circle-exclamation"></i>
         <span id="loginErrorMsg">Incorrect email or password.</span>
       </div>
       <button type="button" class="btn-login" onclick="handleLogin()">
         <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
       </button>
-      <p class="login-hint">Sign in with your Supabase admin account.</p>
+      <p class="login-hint">Sign in with the admin account you created in Supabase.</p>
     </div>
   </div>
 
@@ -116,7 +116,7 @@
         <div class="topbar-right">
           <div class="topbar-notif" id="notifTrigger" onclick="toggleNotifPanel()">
             <i class="fa-regular fa-bell"></i>
-            <span class="notif-badge hidden" id="notifBadge">0</span>
+            <span class="notif-badge" id="notifBadge" class="hidden">0</span>
           </div>
           <a href="https://darlingbigjunoir-svg.github.io/ThePinkChronicles/" target="_blank" rel="noopener" class="btn-visit-site">
             <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Visit Site</span>
@@ -124,7 +124,7 @@
         </div>
 
         <!-- Notification panel -->
-        <div class="notif-panel hidden" id="notifPanel">
+        <div class="notif-panel" id="notifPanel" class="hidden">
           <div class="notif-panel-header">
             <span>Notifications</span>
             <button type="button" onclick="clearNotifs()">
@@ -219,6 +219,17 @@
             <button type="button" onclick="clearSelectedFile()" class="chip-clear" aria-label="Remove file">
               <i class="fa-solid fa-xmark"></i>
             </button>
+          </div>
+        </div>
+
+        <div class="upload-box upload-box-single" style="margin-top:14px;">
+          <div class="upload-box-icons-row">
+            <div class="upload-type-pill"><i class="fa-brands fa-youtube"></i> YouTube Link</div>
+          </div>
+          <h3>Or paste a YouTube link</h3>
+          <p>Best for full episode videos — no file size limits.</p>
+          <div class="meta-field" style="max-width:480px;margin:10px auto 0;">
+            <input type="url" id="metaYoutubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="admin-input" oninput="handleYoutubeInput()" />
           </div>
         </div>
 
@@ -406,10 +417,10 @@
           <div class="section-card">
             <div class="section-card-header"><h2><i class="fa-solid fa-share-nodes"></i> Social Links</h2></div>
             <div class="meta-form">
-              <div class="meta-field social-field"><i class="fa-brands fa-instagram social-icon"></i><input type="url" placeholder="Instagram URL" class="admin-input" /></div>
-              <div class="meta-field social-field"><i class="fa-brands fa-tiktok social-icon"></i><input type="url" placeholder="TikTok URL" class="admin-input" /></div>
-              <div class="meta-field social-field"><i class="fa-brands fa-spotify social-icon"></i><input type="url" placeholder="Spotify Podcast URL" class="admin-input" /></div>
-              <div class="meta-field social-field"><i class="fa-brands fa-youtube social-icon"></i><input type="url" placeholder="YouTube Channel URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-instagram social-icon"></i><input type="url" id="settingInstagram" placeholder="Instagram URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-tiktok social-icon"></i><input type="url" id="settingTiktok" placeholder="TikTok URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-spotify social-icon"></i><input type="url" id="settingSpotify" placeholder="Spotify Podcast URL" class="admin-input" /></div>
+              <div class="meta-field social-field"><i class="fa-brands fa-youtube social-icon"></i><input type="url" id="settingYoutube" placeholder="YouTube Channel URL" class="admin-input" /></div>
               <div class="meta-actions"><button type="button" class="btn-primary" onclick="saveSocials()"><i class="fa-solid fa-floppy-disk"></i> Save Social Links</button></div>
             </div>
           </div>
@@ -465,8 +476,8 @@
     </div>
   </div>
 
-  
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
   <script src="js/script.js"></script>
 </body>
 </html>
