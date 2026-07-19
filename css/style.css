@@ -4,12 +4,6 @@
 
 *{ box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Utility: hides any element it's applied to.
-   Used throughout the markup (login/dashboard toggle,
-   modals, notif panel, upload progress, etc.) — without
-   this rule those elements render regardless of the class. */
-.hidden { display: none !important; }
-
 :root {
   --pink-deep:    #e0005e;
   --pink-mid:     #ff5fa0;
