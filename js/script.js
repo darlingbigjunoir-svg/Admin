@@ -19,9 +19,9 @@ let state = {
 };
 
 /* ── Helpers ── */
-function show(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
-function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
-function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+function show(id) { const el = document.getElementById(id); if (el) { el.classList.remove('hidden'); el.style.display = 'block'; } }
+function hide(id) { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.style.display = 'none'; } }
+function showFlex(id) { const el = document.getElementById(id); if (el) { el.classList.remove('hidden'); el.style.display = 'flex'; } }
 
 /* =============================================
    LOGIN  (Supabase Auth)
@@ -711,7 +711,11 @@ function openConfirm(title, msg, callback) {
   document.getElementById('confirmMsg').textContent   = msg;
   confirmCallback = callback;
   showFlex('confirmModal');
-  document.getElementById('confirmOkBtn').onclick = () => { closeConfirm(); if (confirmCallback) confirmCallback(); };
+  document.getElementById('confirmOkBtn').onclick = () => {
+    const cb = confirmCallback;
+    closeConfirm();
+    if (cb) cb();
+  };
 }
 function closeConfirm() { hide('confirmModal'); confirmCallback = null; }
 
