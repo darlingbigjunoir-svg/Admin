@@ -19,9 +19,9 @@ let state = {
 };
 
 /* ── Helpers ── */
-function show(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
-function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
-function showFlex(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+function show(id) { const el = document.getElementById(id); if (el) { el.classList.remove('hidden'); el.style.display = 'block'; } }
+function hide(id) { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.style.display = 'none'; } }
+function showFlex(id) { const el = document.getElementById(id); if (el) { el.classList.remove('hidden'); el.style.display = 'flex'; } }
 
 /* =============================================
    LOGIN  (Supabase Auth)
@@ -89,12 +89,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && ls && ls.style.display !== 'none') handleLogin();
 });
 
-/* Auto-login if a Supabase session already exists (page refresh) */
+/* The login screen always shows first — no auto-login from a
+   saved session. Signing in still works normally; this just
+   means you'll enter your password each time you open the page. */
 async function checkExistingSession() {
-  const { data } = await supabaseClient.auth.getSession();
-  if (data && data.session) {
-    await enterDashboard();
-  }
+  // Intentionally does nothing: login screen stays as the first thing shown.
 }
 
 /* =============================================
@@ -711,7 +710,11 @@ function openConfirm(title, msg, callback) {
   document.getElementById('confirmMsg').textContent   = msg;
   confirmCallback = callback;
   showFlex('confirmModal');
-  document.getElementById('confirmOkBtn').onclick = () => { closeConfirm(); if (confirmCallback) confirmCallback(); };
+  document.getElementById('confirmOkBtn').onclick = () => {
+    const cb = confirmCallback;
+    closeConfirm();
+    if (cb) cb();
+  };
 }
 function closeConfirm() { hide('confirmModal'); confirmCallback = null; }
 
