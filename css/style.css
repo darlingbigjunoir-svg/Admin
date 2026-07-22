@@ -1025,3 +1025,67 @@ body { font-family: var(--ff-body); background: var(--pink-bg); color: var(--dar
 }
 .chip-clear:hover { background: rgba(224,0,94,.12); }
 .chip-clear .fa-solid { color: var(--pink-deep) !important; font-size: .75rem; }
+
+/* =============================================================
+   GLOBAL RESPONSIVE HARDENING
+   Closes the remaining small-screen gaps beyond the existing
+   1100px / 900px / 600px breakpoints above.
+   ============================================================= */
+
+/* Belt-and-suspenders: no element should ever force horizontal scroll */
+html { overflow-x: hidden; }
+img, video, iframe { max-width: 100%; height: auto; }
+
+/* ── Login screen: tighten the card on narrow phones ── */
+@media (max-width: 480px) {
+  .login-card { padding: 32px 22px; border-radius: 18px; }
+  .login-title { font-size: 1.25rem; }
+  .login-logo .fa-microphone-lines { font-size: 2rem; }
+}
+
+/* ── Topbar: reduce side padding and let the title wrap/truncate
+   gracefully instead of crowding the notif bell + Visit Site btn ── */
+@media (max-width: 600px) {
+  .topbar { padding: 0 14px; gap: 10px; }
+  .topbar-title { font-size: .95rem; }
+  .btn-visit-site { padding: 8px 12px; }
+}
+
+/* ── Notification panel: full-width dropdown on narrow phones
+   instead of a fixed 320px box that can overflow the viewport ── */
+@media (max-width: 420px) {
+  .notif-panel { width: calc(100vw - 28px); right: -6px; }
+}
+
+/* ── Stats grid: down to a single column on the smallest phones ── */
+@media (max-width: 420px) {
+  .stats-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Upload boxes: less padding so the dashed border doesn't eat
+   most of the available width on a small phone ── */
+@media (max-width: 480px) {
+  .upload-box { padding: 26px 16px; }
+  .upload-box-icons-row { flex-wrap: wrap; gap: 8px; }
+}
+
+/* ── Buttons: prevent letter-spaced uppercase labels from ever
+   forcing overflow on very narrow screens ── */
+@media (max-width: 420px) {
+  .btn-primary, .btn-ghost, .btn-danger, .btn-login,
+  .btn-upload-browse, .btn-visit-site {
+    white-space: normal;
+    text-align: center;
+  }
+  .meta-actions { flex-direction: column; align-items: stretch; }
+  .meta-actions .btn-primary,
+  .meta-actions .btn-ghost,
+  .meta-actions .btn-danger { justify-content: center; }
+}
+
+/* ── Sidebar footer (avatar + name + logout) stays usable at
+   very narrow widths since the sidebar is a fixed 260px overlay ── */
+@media (max-width: 320px) {
+  .sidebar { width: 240px; }
+  :root { --sidebar-w: 240px; }
+}
