@@ -112,6 +112,8 @@ function switchTab(tabName, btn) {
   if (tabName === 'episodes')  renderEpisodes();
   if (tabName === 'community') renderMembers();
   if (tabName === 'events')    renderEvents();
+  if (tabName === 'stories')   renderStoriesAdmin();
+  if (tabName === 'reports')   renderReports();
   if (tabName === 'settings')  loadSettingsForm();
 }
 
@@ -588,6 +590,107 @@ function deleteEvent(id) {
     state.events = state.events.filter(e => e.id !== id);
     renderEvents();
     showToast('Event deleted.', 'info');
+  });
+}
+
+/* =============================================
+   STORIES  (moderation)
+   ============================================= */
+async function renderStoriesAdmin() {
+  const list = document.getElementById('storiesAdminList');
+  const { data, error } = await supabaseClient
+    .from('stories')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) { console.error(error); list.innerHTML = '<p class="empty-state">Could not load stories.</p>'; return; }
+  if (!data.length) { list.innerHTML = '<p class="empty-state"><i class="fa-regular fa-book"></i><br>No stories submitted yet.</p>'; return; }
+
+  const statusColor = { pending: '#e65100', approved: '#2e7d32', rejected: '#c62828' };
+  list.innerHTML = `<div class="section-card">${data.map(s => `
+    <div class="ep-admin-card" id="story-${s.id}">
+      <div class="ep-admin-num" style="background:${s.status === 'pending' ? '#fff8e1' : s.status === 'approved' ? '#e8f5e9' : '#fce4e4'};">
+        <i class="fa-solid ${s.status === 'pending' ? 'fa-clock' : s.status === 'approved' ? 'fa-check' : 'fa-xmark'}" style="color:${statusColor[s.status]};"></i>
+      </div>
+      <div class="ep-admin-info">
+        <div class="ep-admin-title">${s.title}</div>
+        <div class="ep-admin-meta">
+          <span>By ${s.author_name}</span>
+          <span style="color:${statusColor[s.status]};font-weight:800;text-transform:uppercase;font-size:.66rem;">${s.status}</span>
+        </div>
+        <div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.6;max-width:640px;">${s.content}</div>
+      </div>
+      <div class="ep-admin-actions" style="flex-direction:column;gap:6px;">
+        ${s.status !== 'approved' ? `<button class="btn-icon" onclick="setStoryStatus(${s.id}, 'approved')" title="Approve"><i class="fa-solid fa-check" style="color:#2e7d32 !important;"></i></button>` : ''}
+        ${s.status !== 'rejected' ? `<button class="btn-icon" onclick="setStoryStatus(${s.id}, 'rejected')" title="Reject"><i class="fa-solid fa-xmark" style="color:#c62828 !important;"></i></button>` : ''}
+        <button class="btn-icon btn-icon-danger" onclick="deleteStoryAdmin(${s.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+async function setStoryStatus(id, status) {
+  const { error } = await supabaseClient.from('stories').update({ status }).eq('id', id);
+  if (error) { showToast('Could not update story.', 'error'); return; }
+  showToast(`Story ${status === 'approved' ? 'approved — now visible to the community!' : 'rejected.'}`, status === 'approved' ? 'success' : 'info');
+  renderStoriesAdmin();
+}
+
+function deleteStoryAdmin(id) {
+  openConfirm('Delete Story', 'Delete this story permanently? This cannot be undone.', async () => {
+    const { error } = await supabaseClient.from('stories').delete().eq('id', id);
+    if (error) { showToast('Could not delete story.', 'error'); return; }
+    showToast('Story deleted.', 'info');
+    renderStoriesAdmin();
+  });
+}
+
+/* =============================================
+   REPORTS  (message moderation)
+   ============================================= */
+async function renderReports() {
+  const list = document.getElementById('reportsList');
+  const { data, error } = await supabaseClient
+    .from('message_reports')
+    .select('*, direct_messages(content, sender_member_id, created_at)')
+    .order('created_at', { ascending: false });
+
+  if (error) { console.error(error); list.innerHTML = '<p class="empty-state">Could not load reports.</p>'; return; }
+  if (!data.length) { list.innerHTML = '<p class="empty-state"><i class="fa-solid fa-flag"></i><br>No reports right now — all clear! 💕</p>'; return; }
+
+  // Look up display names for reporters and message senders
+  const memberIds = [...new Set(data.flatMap(r => [r.reporter_member_id, r.direct_messages?.sender_member_id]).filter(Boolean))];
+  const { data: memberRows } = await supabaseClient.from('members').select('id, name, nickname').in('id', memberIds);
+  const nameOf = id => {
+    const m = (memberRows || []).find(x => x.id === id);
+    return m ? (m.nickname || m.name) : 'Unknown';
+  };
+
+  list.innerHTML = `<div class="section-card">${data.map(r => `
+    <div class="ep-admin-card" id="report-${r.id}">
+      <div class="ep-admin-num" style="background:#fce4e4;"><i class="fa-solid fa-flag" style="color:#c62828 !important;"></i></div>
+      <div class="ep-admin-info">
+        <div class="ep-admin-title">Reported message from ${nameOf(r.direct_messages?.sender_member_id)}</div>
+        <div class="ep-admin-meta">
+          <span>Reported by ${nameOf(r.reporter_member_id)}</span>
+          <span><i class="fa-regular fa-calendar-days"></i>${new Date(r.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
+        </div>
+        <div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.6;">
+          <strong>Message:</strong> "${r.direct_messages ? r.direct_messages.content : '(message deleted)'}"
+        </div>
+        ${r.reason ? `<div style="font-size:.78rem;color:#64748b;margin-top:4px;"><strong>Reason given:</strong> ${r.reason}</div>` : ''}
+      </div>
+      <div class="ep-admin-actions">
+        <button class="btn-icon btn-icon-danger" onclick="dismissReport(${r.id})" title="Dismiss / mark handled"><i class="fa-solid fa-check"></i></button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function dismissReport(id) {
+  openConfirm('Dismiss Report', 'Mark this report as handled and remove it from the list?', async () => {
+    const { error } = await supabaseClient.from('message_reports').delete().eq('id', id);
+    if (error) { showToast('Could not dismiss report.', 'error'); return; }
+    showToast('Report dismissed.', 'info');
+    renderReports();
   });
 }
 

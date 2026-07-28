@@ -89,6 +89,12 @@
         <button type="button" class="sidebar-link" onclick="switchTab('events', this)">
           <i class="fa-regular fa-calendar-days"></i> Events
         </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('stories', this)">
+          <i class="fa-solid fa-book-open"></i> Stories
+        </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('reports', this)">
+          <i class="fa-solid fa-flag"></i> Reports
+        </button>
         <button type="button" class="sidebar-link" onclick="switchTab('settings', this)">
           <i class="fa-solid fa-gear"></i> Settings
         </button>
@@ -432,6 +438,28 @@
 
         <div id="eventsList">
           <p class="empty-state"><i class="fa-regular fa-calendar"></i><br>No events yet. Add your first one above!</p>
+        </div>
+      </section>
+
+      <!-- ===== TAB: STORIES ===== -->
+      <section class="tab-content" id="tab-stories">
+        <div class="page-header">
+          <h1>Stories <i class="fa-solid fa-book-open tab-heart"></i></h1>
+          <p>Review member-submitted stories before they go public.</p>
+        </div>
+        <div id="storiesAdminList">
+          <p class="empty-state"><i class="fa-regular fa-book"></i><br>No stories submitted yet.</p>
+        </div>
+      </section>
+
+      <!-- ===== TAB: REPORTS ===== -->
+      <section class="tab-content" id="tab-reports">
+        <div class="page-header">
+          <h1>Reports <i class="fa-solid fa-flag tab-heart"></i></h1>
+          <p>Messages members have flagged as a problem — review these promptly.</p>
+        </div>
+        <div id="reportsList">
+          <p class="empty-state"><i class="fa-solid fa-flag"></i><br>No reports right now.</p>
         </div>
       </section>
 
