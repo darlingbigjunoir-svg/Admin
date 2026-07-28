@@ -86,6 +86,9 @@
         <button type="button" class="sidebar-link" onclick="switchTab('community', this)">
           <i class="fa-solid fa-people-group"></i> Community
         </button>
+        <button type="button" class="sidebar-link" onclick="switchTab('events', this)">
+          <i class="fa-regular fa-calendar-days"></i> Events
+        </button>
         <button type="button" class="sidebar-link" onclick="switchTab('settings', this)">
           <i class="fa-solid fa-gear"></i> Settings
         </button>
@@ -386,6 +389,49 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: EVENTS ===== -->
+      <section class="tab-content" id="tab-events">
+        <div class="page-header">
+          <h1>Events <i class="fa-regular fa-calendar-days tab-heart"></i></h1>
+          <p>Post upcoming events — members see these live on their dashboard.</p>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <h2><i class="fa-solid fa-plus"></i> Add Event</h2>
+          </div>
+          <div class="meta-form">
+            <div class="meta-field">
+              <label>Event Title</label>
+              <input type="text" id="eventTitle" placeholder="e.g. Monthly Sisterhood Meetup" class="admin-input" />
+            </div>
+            <div class="meta-field">
+              <label>Description</label>
+              <textarea id="eventDesc" placeholder="What's this event about?" class="admin-textarea" rows="2"></textarea>
+            </div>
+            <div class="meta-form-row">
+              <div class="meta-field">
+                <label for="eventDate">Date</label>
+                <input type="date" id="eventDate" class="admin-input" title="Event Date" aria-label="Event Date" />
+              </div>
+              <div class="meta-field">
+                <label>Time</label>
+                <input type="text" id="eventTime" placeholder="e.g. 6:00 PM GMT" class="admin-input" />
+              </div>
+            </div>
+            <div class="meta-actions">
+              <button type="button" class="btn-primary" onclick="addEvent()">
+                <i class="fa-solid fa-floppy-disk"></i> Save Event
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="eventsList">
+          <p class="empty-state"><i class="fa-regular fa-calendar"></i><br>No events yet. Add your first one above!</p>
         </div>
       </section>
 

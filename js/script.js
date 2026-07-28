@@ -10,6 +10,7 @@
 let state = {
   episodes: [],
   members:  [],
+  events:   [],
   notifications: [
     { icon: 'fa-cloud-arrow-up', text: 'Upload Media to get started!' },
     { icon: 'fa-people-group',   text: 'Add your first community member.' },
@@ -110,6 +111,7 @@ function switchTab(tabName, btn) {
   if (tabName === 'overview')  refreshOverview();
   if (tabName === 'episodes')  renderEpisodes();
   if (tabName === 'community') renderMembers();
+  if (tabName === 'events')    renderEvents();
   if (tabName === 'settings')  loadSettingsForm();
 }
 
@@ -161,9 +163,10 @@ document.addEventListener('click', e => {
    DATA LOADING  (Supabase reads)
    ============================================= */
 async function loadState() {
-  const [episodesRes, membersRes] = await Promise.all([
+  const [episodesRes, membersRes, eventsRes] = await Promise.all([
     supabaseClient.from('episodes').select('*').order('created_at', { ascending: false }),
-    supabaseClient.from('members').select('*').order('joined_at', { ascending: false })
+    supabaseClient.from('members').select('*').order('joined_at', { ascending: false }),
+    supabaseClient.from('events').select('*').order('event_date', { ascending: true })
   ]);
 
   if (episodesRes.error) { console.error(episodesRes.error); showToast('Could not load episodes.', 'error'); }
@@ -171,6 +174,9 @@ async function loadState() {
 
   if (membersRes.error) { console.error(membersRes.error); showToast('Could not load members.', 'error'); }
   else state.members = membersRes.data.map(mapMemberFromDb);
+
+  if (eventsRes.error) { console.error(eventsRes.error); showToast('Could not load events.', 'error'); }
+  else state.events = eventsRes.data;
 }
 
 /* Convert DB rows (snake_case) to the shape the UI code already expects */
@@ -197,6 +203,7 @@ function refreshAll() {
   refreshOverview();
   renderEpisodes();
   renderMembers();
+  renderEvents();
 }
 
 function refreshOverview() {
@@ -519,6 +526,69 @@ async function saveEditEpisode() {
 
   refreshAll(); closeEditModal();
   showToast(`"${ep.title}" updated on the main site!`, 'success');
+}
+
+/* =============================================
+   EVENTS
+   ============================================= */
+function renderEvents() {
+  const list = document.getElementById('eventsList');
+  if (!state.events.length) {
+    list.innerHTML = '<p class="empty-state"><i class="fa-regular fa-calendar"></i><br>No events yet. Add your first one above!</p>';
+    return;
+  }
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  list.innerHTML = `<div class="section-card">${state.events.map(ev => {
+    const d = ev.event_date ? new Date(ev.event_date) : null;
+    return `
+    <div class="ep-admin-card">
+      <div class="ep-admin-num">${d ? monthNames[d.getMonth()] : '—'}<br>${d ? d.getDate() : '—'}</div>
+      <div class="ep-admin-info">
+        <div class="ep-admin-title">${ev.title}</div>
+        <div class="ep-admin-meta">
+          ${ev.event_time ? `<span><i class="fa-regular fa-clock"></i>${ev.event_time}</span>` : ''}
+        </div>
+        ${ev.description ? `<div style="font-size:.75rem;color:#64748b;margin-top:5px;line-height:1.5;">${ev.description}</div>` : ''}
+      </div>
+      <div class="ep-admin-actions">
+        <button class="btn-icon btn-icon-danger" onclick="deleteEvent(${ev.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function addEvent() {
+  const title = document.getElementById('eventTitle').value.trim();
+  const desc  = document.getElementById('eventDesc').value.trim();
+  const date  = document.getElementById('eventDate').value;
+  const time  = document.getElementById('eventTime').value.trim();
+
+  if (!title) { showToast('Please enter an event title.', 'error'); return; }
+  if (!date)  { showToast('Please pick a date.', 'error'); return; }
+
+  const { data, error } = await supabaseClient.from('events').insert({
+    title, description: desc, event_date: date, event_time: time
+  }).select().single();
+
+  if (error) { console.error(error); showToast('Could not save event: ' + error.message, 'error'); return; }
+
+  state.events.push(data);
+  state.events.sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+  ['eventTitle','eventDesc','eventDate','eventTime'].forEach(id => document.getElementById(id).value = '');
+  renderEvents();
+  showToast(`Event "${title}" added — members will see it on their dashboard! 🎉`, 'success');
+}
+
+function deleteEvent(id) {
+  const ev = state.events.find(e => e.id === id);
+  if (!ev) return;
+  openConfirm('Delete Event', `Delete "${ev.title}"? This cannot be undone.`, async () => {
+    const { error } = await supabaseClient.from('events').delete().eq('id', id);
+    if (error) { showToast('Could not delete event.', 'error'); return; }
+    state.events = state.events.filter(e => e.id !== id);
+    renderEvents();
+    showToast('Event deleted.', 'info');
+  });
 }
 
 /* =============================================
